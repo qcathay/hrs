@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>心率訓練計算器</title>
+
+<!-- PWA Meta -->
+<meta name="application-name" content="心率計算">
+<meta name="description" content="輸入年齡與性別，即時計算最高心率、Zone 1–5 訓練區間及最佳燃脂心率">
+<meta name="theme-color" content="#0a0a0f" id="metaThemeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="心率計算">
+<meta name="msapplication-TileColor" content="#0a0a0f">
+<meta name="msapplication-TileImage" content="icons/icon-144x144.png">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-152x152.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192x192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root, [data-theme="dark"] {
+  --bg:#0a0a0f; --card:#18181f; --card2:#1e1e28;
+  --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
+  --text:#f0f0f5; --muted:#8e8ea0;
+  --accent-male:#4f8ef7; --accent-female:#f472b6;
+  --accent:var(--accent-male);
+  --shadow:rgba(0,0,0,0.45);
+  --mhr-grad:linear-gradient(135deg,#1a1025 0%,#0f1a2e 100%);
+  --fat-grad:linear-gradient(135deg,#0a1f18 0%,#0d1a10 100%);
+  --toggle-bg:#2a2a38; --toggle-knob:#f0f0f5;
+  --key-bg:#1e1e28; --key-active-bg:rgba(79,142,247,0.18); --key-active-border:rgba(79,142,247,0.45);
+  --input-bg:#111118;
+}
+[data-theme="light"] {
+  --bg:#f2f2f7; --card:#ffffff; --card2:#f2f2f7;
+  --border:rgba(0,0,0,0.08); --border2:rgba(0,0,0,0.13);
+  --text:#1c1c1e; --muted:#6c6c80;
+  --accent-male:#0071e3; --accent-female:#db2777;
+  --accent:var(--accent-male);
+  --shadow:rgba(0,0,0,0.10);
+  --mhr-grad:linear-gradient(135deg,#eef3ff 0%,#e8f0fc 100%);
+  --fat-grad:linear-gradient(135deg,#e6faf4 0%,#eafff3 100%);
+  --toggle-bg:#d1d1d6; --toggle-knob:#ffffff;
+  --key-bg:#e5e5ea; --key-active-bg:rgba(0,113,227,0.12); --key-active-border:rgba(0,113,227,0.4);
+  --input-bg:#ffffff;
+}
+/* female accent overrides */
+[data-gender="female"] { --accent:var(--accent-female); }
+[data-gender="female"] .key:active { background:rgba(244,114,182,0.18) !important; border-color:rgba(244,114,182,0.45) !important; }
+[data-theme="light"][data-gender="female"] .key:active { background:rgba(219,39,119,0.12) !important; border-color:rgba(219,39,119,0.4) !important; }
+
+html { transition:background 0.35s,color 0.35s; }
+html,body {
+  min-height:100vh; background:var(--bg); color:var(--text);
+  font-family:-apple-system,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+body {
+  display:flex; flex-direction:column; align-items:center;
+  padding:40px 16px 0;
+  padding-top:max(40px, env(safe-area-inset-top));
+  padding-left:max(16px, env(safe-area-inset-left));
+  padding-right:max(16px, env(safe-area-inset-right));
+  min-height:100vh;
+}
+
+/* TOP BAR */
+.topbar { width:100%; max-width:420px; display:flex; justify-content:flex-end; margin-bottom:8px; z-index:10; }
+.theme-toggle {
+  display:flex; align-items:center; gap:7px;
+  background:var(--card); border:1px solid var(--border2); border-radius:50px;
+  padding:6px 12px 6px 8px; cursor:pointer;
+  transition:background 0.2s; -webkit-tap-highlight-color:transparent; user-select:none;
+}
+.theme-toggle:hover { background:var(--card2); }
+.theme-toggle-track { width:30px; height:17px; background:var(--toggle-bg); border-radius:50px; position:relative; transition:background 0.3s; flex-shrink:0; }
+.theme-toggle-knob { position:absolute; top:2px; left:2px; width:13px; height:13px; background:var(--toggle-knob); border-radius:50%; transition:transform 0.28s cubic-bezier(.4,0,.2,1); box-shadow:0 1px 4px rgba(0,0,0,0.25); }
+[data-theme="light"] .theme-toggle-knob { transform:translateX(13px); }
+[data-theme="light"] .theme-toggle-track { background:var(--accent-male); }
+.theme-label { font-size:12px; font-weight:500; color:var(--muted); }
+.icon-sun,.icon-moon { font-size:14px; line-height:1; }
+[data-theme="dark"] .icon-sun { display:none; }
+[data-theme="light"] .icon-moon { display:none; }
+
+/* HEADER */
+.header { text-align:center; margin-bottom:24px; animation:fadeDown 0.7s ease both; }
+.header-icon { font-size:40px; margin-bottom:10px; display:block; filter:drop-shadow(0 0 18px rgba(244,63,94,0.5)); animation:heartbeat 2.4s ease-in-out infinite; }
+@keyframes heartbeat { 0%,100%{transform:scale(1)} 14%{transform:scale(1.13)} 28%{transform:scale(1)} 42%{transform:scale(1.08)} 56%{transform:scale(1)} }
+.header h1 { font-size:clamp(22px,5vw,30px); font-weight:700; letter-spacing:-0.03em; }
+.header p { font-size:14px; color:var(--muted); margin-top:6px; }
+
+/* CARD */
+.card { background:var(--card); border:1px solid var(--border); border-radius:18px; width:100%; max-width:420px; margin-bottom:14px; overflow:hidden; animation:fadeUp 0.6s ease both; box-shadow:0 2px 16px var(--shadow); transition:background 0.3s,border-color 0.3s; }
+
+/* GENDER */
+.gender-section { padding:20px 22px 0; }
+.section-label { font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--muted); text-transform:uppercase; margin-bottom:10px; }
+.gender-pills { display:flex; gap:8px; }
+.gender-pill {
+  flex:1; height:44px; background:var(--key-bg); border:1px solid var(--border2);
+  border-radius:12px; font-size:14px; font-weight:500; color:var(--muted);
+  cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+  transition:all 0.2s; -webkit-tap-highlight-color:transparent; user-select:none; font-family:inherit;
+}
+.gender-pill:active { transform:scale(0.95); }
+#pillMale.selected  { background:var(--accent-male);   border-color:var(--accent-male);   color:#fff; font-weight:600; box-shadow:0 2px 12px rgba(79,142,247,0.35); }
+#pillFemale.selected{ background:var(--accent-female); border-color:var(--accent-female); color:#fff; font-weight:600; box-shadow:0 2px 14px rgba(244,114,182,0.4); }
+.pill-icon { font-size:16px; }
+
+/* INPUT MODE TABS */
+.input-tabs { display:flex; gap:0; margin:16px 22px 0; background:var(--key-bg); border-radius:10px; padding:3px; }
+.tab-btn {
+  flex:1; padding:7px 4px; border:none; background:transparent; border-radius:8px;
+  font-size:12px; font-weight:500; color:var(--muted); cursor:pointer; font-family:inherit;
+  transition:all 0.2s; -webkit-tap-highlight-color:transparent; user-select:none;
+}
+.tab-btn.active { background:var(--card); color:var(--text); font-weight:600; box-shadow:0 1px 6px var(--shadow); }
+
+/* PANELS */
+.input-panel { display:none; }
+.input-panel.active { display:block; }
+
+/* AGE KEYPAD PANEL */
+.input-section { padding:16px 22px 14px; }
+.input-label { font-size:11px; font-weight:600; letter-spacing:0.08em; color:var(--muted); text-transform:uppercase; margin-bottom:10px; }
+.age-display { display:flex; align-items:baseline; gap:6px; margin-bottom:2px; }
+.age-number { font-size:72px; font-weight:700; letter-spacing:-0.04em; color:var(--text); line-height:1; font-variant-numeric:tabular-nums; min-width:3ch; transition:color 0.3s; }
+.age-number.has-value { color:var(--accent); }
+.age-unit { font-size:22px; color:var(--muted); font-weight:400; }
+.age-cursor { display:inline-block; width:3px; height:58px; background:var(--accent); border-radius:2px; margin-left:2px; vertical-align:middle; animation:blink 1s step-end infinite; }
+@keyframes blink { 50%{opacity:0} }
+.age-hint { font-size:11px; color:var(--muted); margin-top:4px; opacity:0.7; }
+.age-hint.error { color:#f43f5e; opacity:1; font-weight:500; }
+
+.keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; padding:0 22px 20px; }
+.key {
+  background:var(--key-bg); border:1px solid var(--border); border-radius:12px;
+  height:58px; font-size:22px; font-weight:500; color:var(--text); cursor:pointer;
+  transition:background 0.1s,transform 0.09s,border-color 0.1s;
+  display:flex; align-items:center; justify-content:center;
+  -webkit-tap-highlight-color:transparent; user-select:none; font-family:inherit;
+}
+.key:active { background:var(--key-active-bg); border-color:var(--key-active-border); transform:scale(0.92); }
+.key.key-delete { font-size:18px; color:var(--muted); }
+.key.key-zero { grid-column:2; }
+.key.key-calc { grid-column:3; background:var(--accent); border-color:var(--accent); color:#fff; font-size:15px; font-weight:600; }
+.key.key-calc:active { opacity:0.82; transform:scale(0.92); }
+
+/* DOB PANEL */
+.dob-panel { padding:16px 22px 20px; }
+.privacy-note {
+  display:flex; align-items:flex-start; gap:9px;
+  background:var(--card2); border:1px solid var(--border); border-radius:10px;
+  padding:10px 13px; margin-bottom:16px; font-size:11.5px; color:var(--muted); line-height:1.55;
+}
+.privacy-note .lock { font-size:16px; flex-shrink:0; margin-top:1px; }
+.dob-fields { display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; margin-bottom:14px; }
+.dob-field label { display:block; font-size:10px; font-weight:600; letter-spacing:0.08em; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+.dob-field select {
+  width:100%; background:var(--key-bg); border:1px solid var(--border2); border-radius:10px;
+  padding:10px 8px; font-size:13px; color:var(--text); font-family:inherit; cursor:pointer;
+  appearance:none; -webkit-appearance:none; outline:none; transition:border-color 0.2s;
+}
+.dob-field select:focus { border-color:var(--accent); }
+.dob-computed {
+  background:var(--key-bg); border:1px solid var(--border); border-radius:10px;
+  padding:12px 16px; display:flex; align-items:center; justify-content:space-between;
+}
+.dob-computed-label { font-size:11px; font-weight:600; letter-spacing:0.08em; color:var(--muted); text-transform:uppercase; }
+.dob-computed-age { font-size:28px; font-weight:700; letter-spacing:-0.03em; color:var(--accent); font-variant-numeric:tabular-nums; }
+.dob-computed-unit { font-size:13px; color:var(--muted); }
+.dob-calc-btn {
+  width:100%; margin-top:12px; padding:15px; background:var(--accent); border:none; border-radius:12px;
+  color:#fff; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit;
+  transition:opacity 0.15s,transform 0.1s; -webkit-tap-highlight-color:transparent;
+}
+.dob-calc-btn:active { opacity:0.82; transform:scale(0.98); }
+
+/* FORMULA NOTE */
+.formula-note { margin:0 22px 18px; background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; font-size:11.5px; color:var(--muted); line-height:1.55; }
+.formula-note span { color:var(--accent); font-weight:600; }
+
+/* RESULTS */
+.results { display:none; width:100%; max-width:420px; animation:fadeUp 0.5s ease both; }
+.results.visible { display:block; }
+
+.mhr-card { background:var(--mhr-grad); border:1px solid rgba(79,142,247,0.2); border-radius:18px; padding:22px 24px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; transition:background 0.3s; box-shadow:0 2px 16px var(--shadow); }
+.mhr-label { font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+.mhr-value { font-size:50px; font-weight:700; letter-spacing:-0.04em; color:var(--text); font-variant-numeric:tabular-nums; line-height:1; }
+.mhr-unit { font-size:15px; color:var(--muted); margin-top:4px; }
+.mhr-badge { background:rgba(79,142,247,0.12); border:1px solid rgba(79,142,247,0.25); border-radius:50px; padding:8px 13px; font-size:11.5px; color:var(--accent); font-weight:500; text-align:center; white-space:nowrap; line-height:1.5; }
+
+.fatburn-card { background:var(--fat-grad); border:1px solid rgba(52,211,153,0.22); border-radius:18px; padding:18px 22px; margin-bottom:14px; display:flex; align-items:center; gap:16px; box-shadow:0 2px 16px var(--shadow); }
+.fatburn-icon { font-size:28px; }
+.fatburn-label { font-size:11px; font-weight:600; letter-spacing:0.09em; color:#34d399; text-transform:uppercase; margin-bottom:4px; }
+.fatburn-range { font-size:26px; font-weight:700; letter-spacing:-0.03em; color:var(--text); font-variant-numeric:tabular-nums; }
+.fatburn-desc { font-size:11.5px; color:var(--muted); margin-top:3px; }
+
+.zones-bar { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:18px 22px; margin-bottom:14px; box-shadow:0 2px 16px var(--shadow); transition:background 0.3s,border-color 0.3s; }
+.bar-label { font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--muted); text-transform:uppercase; margin-bottom:12px; }
+.bar-track { display:flex; height:36px; gap:3px; overflow:visible; }
+.bar-seg { flex:1; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:rgba(0,0,0,0.65); border-radius:7px; cursor:pointer; transition:flex 0.35s cubic-bezier(.4,0,.2,1),opacity 0.22s,transform 0.15s,box-shadow 0.2s; -webkit-tap-highlight-color:transparent; user-select:none; }
+.bar-seg:hover { opacity:0.85; transform:scaleY(1.07); }
+.bar-seg.active { flex:2.3; box-shadow:0 0 0 2.5px rgba(255,255,255,0.25),0 4px 16px rgba(0,0,0,0.35); transform:scaleY(1.13); font-size:12px; }
+.bar-seg.dimmed { opacity:0.3; }
+.zone-tooltip { margin-top:13px; background:var(--card2); border:1px solid var(--border2); border-radius:12px; padding:13px 16px; animation:fadeUp 0.2s ease both; }
+.zt-top { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.zt-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.zt-name { font-size:13px; font-weight:600; color:var(--text); }
+.zt-pct { font-size:11px; color:var(--muted); margin-left:auto; }
+.zt-bpm { font-size:26px; font-weight:700; letter-spacing:-0.03em; color:var(--text); font-variant-numeric:tabular-nums; line-height:1.1; }
+.zt-feel { font-size:11.5px; color:var(--muted); margin-top:4px; }
+.bar-minmax { display:flex; justify-content:space-between; margin-top:8px; }
+.bar-minmax span { font-size:11px; color:var(--muted); }
+
+.zones-card { background:var(--card); border:1px solid var(--border); border-radius:18px; overflow:hidden; margin-bottom:14px; box-shadow:0 2px 16px var(--shadow); transition:background 0.3s,border-color 0.3s; }
+.zones-header { padding:14px 22px 11px; font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); }
+.zone-row { display:flex; align-items:center; padding:13px 22px; border-bottom:1px solid var(--border); gap:13px; cursor:pointer; transition:background 0.2s,border-left 0.18s,opacity 0.22s; border-left:3px solid transparent; }
+.zone-row:last-child { border-bottom:none; }
+.zone-row:hover { background:rgba(128,128,128,0.05); }
+.zone-row.active { background:rgba(255,230,0,0.055)!important; border-left:3px solid rgba(255,230,0,0.65); }
+.zone-row.dimmed { opacity:0.3; }
+.zone-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.zone-info { flex:1; }
+.zone-name { font-size:13px; font-weight:500; color:var(--text); }
+.zone-desc { font-size:11px; color:var(--muted); margin-top:2px; }
+.zone-right { text-align:right; }
+.zone-bpm { font-size:15px; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+.zone-pct { font-size:11px; color:var(--muted); margin-top:2px; }
+
+.reset-btn { width:100%; max-width:420px; margin-bottom:28px; padding:17px; background:var(--card); border:1px solid var(--border2); border-radius:18px; color:var(--muted); font-size:15px; font-weight:500; font-family:inherit; cursor:pointer; letter-spacing:-0.01em; transition:all 0.18s; display:none; box-shadow:0 2px 16px var(--shadow); }
+.reset-btn.visible { display:block; }
+.reset-btn:hover { background:var(--card2); color:var(--text); }
+.reset-btn:active { transform:scale(0.98); }
+
+.tips-section { width:100%; max-width:420px; margin-bottom:40px; }
+.tips-header { font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--muted); text-transform:uppercase; margin-bottom:10px; padding:0 4px; }
+.tip-card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:18px 22px; display:flex; gap:13px; align-items:flex-start; cursor:pointer; transition:background 0.18s,border-color 0.18s; box-shadow:0 2px 16px var(--shadow); }
+.tip-card:hover { background:var(--card2); border-color:var(--border2); }
+.tip-emoji { font-size:22px; flex-shrink:0; margin-top:1px; }
+.tip-text { font-size:13px; line-height:1.65; color:var(--text); opacity:0.8; }
+.tip-refresh { font-size:11px; color:var(--accent); margin-top:7px; font-weight:500; }
+
+.disclaimer { font-size:11px; color:var(--muted); text-align:center; max-width:340px; line-height:1.65; padding-bottom:48px; opacity:0.55; }
+
+@keyframes fadeDown { from{opacity:0;transform:translateY(-14px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeUp   { from{opacity:0;transform:translateY(18px)}  to{opacity:1;transform:translateY(0)} }
+@keyframes slideUp  { from{opacity:0;transform:translateX(-50%) translateY(20px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="theme-toggle" onclick="toggleTheme()">
+    <span class="icon-moon">🌙</span>
+    <span class="icon-sun">☀️</span>
+    <div class="theme-toggle-track"><div class="theme-toggle-knob"></div></div>
+    <span class="theme-label" id="themeLabel">深色</span>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <span class="header-icon">❤️</span>
+  <h1>心率訓練計算器</h1>
+  <p>輸入年齡與性別，即時查看個人化心率區間</p>
+</div>
+
+<!-- Input Card -->
+<div class="card" id="inputCard">
+
+  <!-- Gender -->
+  <div class="gender-section">
+    <div class="section-label">性別</div>
+    <div class="gender-pills">
+      <button class="gender-pill selected" id="pillMale" onclick="selectGender('male')">
+        <span class="pill-icon">♂</span> 男性
+      </button>
+      <button class="gender-pill" id="pillFemale" onclick="selectGender('female')">
+        <span class="pill-icon">♀</span> 女性
+      </button>
+    </div>
+  </div>
+
+  <!-- Input mode tabs -->
+  <div class="input-tabs">
+    <button class="tab-btn active" id="tabAge"  onclick="switchTab('age')">🔢 直接輸入年齡</button>
+    <button class="tab-btn"        id="tabDob"  onclick="switchTab('dob')">📅 輸入出生日期</button>
+  </div>
+
+  <!-- Panel A: Keypad -->
+  <div class="input-panel active" id="panelAge">
+    <div class="input-section">
+      <div class="input-label">輸入年齡</div>
+      <div class="age-display">
+        <div class="age-number" id="ageDisplay">—</div>
+        <div class="age-unit"   id="ageUnit"></div>
+        <span class="age-cursor"></span>
+      </div>
+      <div class="age-hint" id="ageHint">範圍：1–110 歲</div>
+    </div>
+    <div class="keypad">
+      <button class="key" onclick="pressKey('1')">1</button>
+      <button class="key" onclick="pressKey('2')">2</button>
+      <button class="key" onclick="pressKey('3')">3</button>
+      <button class="key" onclick="pressKey('4')">4</button>
+      <button class="key" onclick="pressKey('5')">5</button>
+      <button class="key" onclick="pressKey('6')">6</button>
+      <button class="key" onclick="pressKey('7')">7</button>
+      <button class="key" onclick="pressKey('8')">8</button>
+      <button class="key" onclick="pressKey('9')">9</button>
+      <button class="key key-delete" onclick="pressKey('del')">⌫</button>
+      <button class="key key-zero"   onclick="pressKey('0')">0</button>
+      <button class="key key-calc"   onclick="calculate()">計算</button>
+    </div>
+  </div>
+
+  <!-- Panel B: DOB picker -->
+  <div class="input-panel" id="panelDob">
+    <div class="dob-panel">
+      <div class="privacy-note">
+        <span class="lock">🔒</span>
+        <span>出生日期<strong>僅用於即時計算年齡</strong>，不會被收集、儲存或傳送至任何伺服器。所有運算在你的裝置本地完成。</span>
+      </div>
+      <div class="dob-fields">
+        <div class="dob-field">
+          <label>年份</label>
+          <select id="dobYear" onchange="updateDobAge()"></select>
+        </div>
+        <div class="dob-field">
+          <label>月份</label>
+          <select id="dobMonth" onchange="updateDobAge()">
+            <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+            <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+            <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+            <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+          </select>
+        </div>
+        <div class="dob-field">
+          <label>日期</label>
+          <select id="dobDay" onchange="updateDobAge()"></select>
+        </div>
+      </div>
+      <div class="dob-computed">
+        <div>
+          <div class="dob-computed-label">計算得出年齡</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:5px">
+          <span class="dob-computed-age" id="dobAgeDisplay">—</span>
+          <span class="dob-computed-unit">歲</span>
+        </div>
+      </div>
+      <button class="dob-calc-btn" onclick="calculateFromDob()">計算心率區間 →</button>
+    </div>
+  </div>
+
+  <!-- Formula note -->
+  <div class="formula-note">
+    使用 <span id="formulaName">Tanaka（男）</span> 公式：<span id="formulaExpr">208 − 0.7 × 年齡</span>
+  </div>
+
+</div>
+
+<!-- Results -->
+<div class="results" id="results">
+  <div class="mhr-card">
+    <div>
+      <div class="mhr-label">最高心率 (MHR)</div>
+      <div class="mhr-value" id="mhrVal">—</div>
+      <div class="mhr-unit">次 / 分鐘</div>
+    </div>
+    <div class="mhr-badge" id="mhrBadge">—</div>
+  </div>
+  <div class="fatburn-card">
+    <div class="fatburn-icon">🔥</div>
+    <div>
+      <div class="fatburn-label">最佳燃脂心率</div>
+      <div class="fatburn-range" id="fatRange">—</div>
+      <div class="fatburn-desc">MHR 的 60–70%（Zone 2）最高效燃脂</div>
+    </div>
+  </div>
+  <div class="zones-bar">
+    <div class="bar-label">點擊區間查看詳情</div>
+    <div class="bar-track">
+      <div class="bar-seg" id="seg1" onclick="selectZone(1)" style="background:#3b82f6">Z1</div>
+      <div class="bar-seg" id="seg2" onclick="selectZone(2)" style="background:#22d3ee">Z2</div>
+      <div class="bar-seg" id="seg3" onclick="selectZone(3)" style="background:#a3e635">Z3</div>
+      <div class="bar-seg" id="seg4" onclick="selectZone(4)" style="background:#fb923c">Z4</div>
+      <div class="bar-seg" id="seg5" onclick="selectZone(5)" style="background:#f43f5e">Z5</div>
+    </div>
+    <div class="bar-minmax"><span id="barMin">—</span><span id="barMax">—</span></div>
+    <div class="zone-tooltip" id="zoneTooltip" style="display:none">
+      <div class="zt-top">
+        <span class="zt-dot" id="ztDot"></span>
+        <span class="zt-name" id="ztName"></span>
+        <span class="zt-pct"  id="ztPct"></span>
+      </div>
+      <div class="zt-bpm"  id="ztBpm"></div>
+      <div class="zt-feel" id="ztFeel"></div>
+    </div>
+  </div>
+  <div class="zones-card">
+    <div class="zones-header">訓練心率 Zone 1–5</div>
+    <div class="zone-row" id="row1" onclick="selectZone(1)">
+      <div class="zone-dot" style="background:#3b82f6"></div>
+      <div class="zone-info"><div class="zone-name">Zone 1 · 暖身／恢復</div><div class="zone-desc">輕鬆說話，適合熱身與主動恢復</div></div>
+      <div class="zone-right"><div class="zone-bpm" id="z1">—</div><div class="zone-pct">50–60%</div></div>
+    </div>
+    <div class="zone-row" id="row2" onclick="selectZone(2)">
+      <div class="zone-dot" style="background:#22d3ee"></div>
+      <div class="zone-info"><div class="zone-name">Zone 2 · 有氧基礎 🔥</div><div class="zone-desc">可說完整句子，最高效燃脂區</div></div>
+      <div class="zone-right"><div class="zone-bpm" id="z2">—</div><div class="zone-pct">60–70%</div></div>
+    </div>
+    <div class="zone-row" id="row3" onclick="selectZone(3)">
+      <div class="zone-dot" style="background:#a3e635"></div>
+      <div class="zone-info"><div class="zone-name">Zone 3 · 有氧耐力</div><div class="zone-desc">稍喘，提升心肺耐力</div></div>
+      <div class="zone-right"><div class="zone-bpm" id="z3">—</div><div class="zone-pct">70–80%</div></div>
+    </div>
+    <div class="zone-row" id="row4" onclick="selectZone(4)">
+      <div class="zone-dot" style="background:#fb923c"></div>
+      <div class="zone-info"><div class="zone-name">Zone 4 · 乳酸閾值</div><div class="zone-desc">明顯喘，提升速度與表現</div></div>
+      <div class="zone-right"><div class="zone-bpm" id="z4">—</div><div class="zone-pct">80–90%</div></div>
+    </div>
+    <div class="zone-row" id="row5" onclick="selectZone(5)">
+      <div class="zone-dot" style="background:#f43f5e"></div>
+      <div class="zone-info"><div class="zone-name">Zone 5 · 最大衝刺</div><div class="zone-desc">無法說話，短時間爆發訓練</div></div>
+      <div class="zone-right"><div class="zone-bpm" id="z5">—</div><div class="zone-pct">90–100%</div></div>
+    </div>
+  </div>
+</div>
+
+<button class="reset-btn" id="resetBtn" onclick="reset()">↺ 重新開始</button>
+
+<div class="tips-section">
+  <div class="tips-header">💡 有氧訓練 Tips</div>
+  <div class="tip-card" onclick="nextTip()">
+    <div class="tip-emoji" id="tipEmoji">🏃</div>
+    <div>
+      <div class="tip-text" id="tipText"></div>
+      <div class="tip-refresh">點擊換一個 →</div>
+    </div>
+  </div>
+</div>
+
+<div class="disclaimer">本計算器僅供參考，不替代醫療建議。開始高強度訓練計劃前，建議諮詢醫生或專業教練。</div>
+
+<!-- PWA Install Banner -->
+<div id="installBanner" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#18181f;border:1px solid rgba(255,255,255,0.13);border-radius:16px;padding:14px 20px;align-items:center;gap:14px;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:999;max-width:360px;width:calc(100% - 40px);font-family:-apple-system,sans-serif;animation:slideUp 0.3s ease both;">
+  <span style="font-size:26px">❤️</span>
+  <div style="flex:1">
+    <div style="font-size:13px;font-weight:600;color:#f0f0f5">加到主畫面</div>
+    <div style="font-size:11px;color:#8e8ea0;margin-top:2px">隨時離線使用，無需網絡</div>
+  </div>
+  <button onclick="installPWA()" style="background:#4f8ef7;border:none;border-radius:10px;padding:8px 14px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;">安裝</button>
+  <button onclick="dismissBanner()" style="background:none;border:none;color:#8e8ea0;font-size:18px;cursor:pointer;padding:4px;line-height:1;">×</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════
+   AUDIO FEEDBACK (Web Audio API)
+═══════════════════════════════════ */
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function playTick(type = 'key') {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (type === 'key') {
+      osc.frequency.setValueAtTime(480, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.06);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.07);
+    } else if (type === 'del') {
+      osc.frequency.setValueAtTime(260, ctx.currentTime);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.05);
+    } else if (type === 'calc') {
+      // Satisfying two-tone success chime
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc.frequency.setValueAtTime(523, ctx.currentTime);
+      gain.gain.setValueAtTime(0.10, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
+      osc2.frequency.setValueAtTime(784, ctx.currentTime + 0.10);
+      gain2.gain.setValueAtTime(0.001, ctx.currentTime + 0.09);
+      gain2.gain.linearRampToValueAtTime(0.10, ctx.currentTime + 0.11);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+      osc2.start(ctx.currentTime + 0.09); osc2.stop(ctx.currentTime + 0.28);
+    } else if (type === 'error') {
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(160, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.09, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.12);
+    }
+  } catch(e) { /* silently ignore if audio blocked */ }
+}
+
+/* ═══════════════════════════════════
+   STATE
+═══════════════════════════════════ */
+let ageInput = '';
+let gender   = 'male';
+let activeZone = null;
+let tipIndex = 0;
+let currentTab = 'age';
+let dobAge = null;
+
+/* ═══════════════════════════════════
+   THEME
+═══════════════════════════════════ */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeLabel').textContent = isDark ? '淺色' : '深色';
+  document.getElementById('metaThemeColor').setAttribute('content', isDark ? '#f2f2f7' : '#0a0a0f');
+}
+
+/* ═══════════════════════════════════
+   GENDER
+═══════════════════════════════════ */
+const formulas = {
+  male:   { name:'Tanaka（男）', expr:'208 − 0.7 × 年齡',  calc: a => Math.round(208 - 0.7  * a) },
+  female: { name:'Gulati（女）', expr:'206 − 0.88 × 年齡', calc: a => Math.round(206 - 0.88 * a) },
+};
+
+function selectGender(g) {
+  gender = g;
+  document.documentElement.setAttribute('data-gender', g);
+  document.getElementById('pillMale').classList.toggle('selected',   g === 'male');
+  document.getElementById('pillFemale').classList.toggle('selected', g === 'female');
+  const f = formulas[g];
+  document.getElementById('formulaName').textContent = f.name;
+  document.getElementById('formulaExpr').textContent = f.expr;
+  if (document.getElementById('results').classList.contains('visible')) calculate(true);
+}
+
+/* ═══════════════════════════════════
+   INPUT TABS
+═══════════════════════════════════ */
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tabAge').classList.toggle('active', tab === 'age');
+  document.getElementById('tabDob').classList.toggle('active', tab === 'dob');
+  document.getElementById('panelAge').classList.toggle('active', tab === 'age');
+  document.getElementById('panelDob').classList.toggle('active', tab === 'dob');
+}
+
+/* ═══════════════════════════════════
+   DOB PICKER
+═══════════════════════════════════ */
+(function initDob() {
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const ySel = document.getElementById('dobYear');
+  for (let y = thisYear; y >= thisYear - 110; y--) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y + '年';
+    if (y === thisYear - 30) opt.selected = true;
+    ySel.appendChild(opt);
+  }
+  populateDays();
+})();
+
+function populateDays() {
+  const y = +document.getElementById('dobYear').value;
+  const m = +document.getElementById('dobMonth').value;
+  const max = new Date(y, m, 0).getDate();
+  const dSel = document.getElementById('dobDay');
+  const cur  = +dSel.value || 1;
+  dSel.innerHTML = '';
+  for (let d = 1; d <= max; d++) {
+    const opt = document.createElement('option');
+    opt.value = d; opt.textContent = d + '日';
+    if (d === Math.min(cur, max)) opt.selected = true;
+    dSel.appendChild(opt);
+  }
+}
+
+function updateDobAge() {
+  populateDays();
+  const y = +document.getElementById('dobYear').value;
+  const m = +document.getElementById('dobMonth').value;
+  const d = +document.getElementById('dobDay').value;
+  const now = new Date();
+  let age = now.getFullYear() - y;
+  if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) age--;
+  dobAge = age > 0 ? age : 0;
+  document.getElementById('dobAgeDisplay').textContent = dobAge >= 1 ? dobAge : '—';
+}
+
+function calculateFromDob() {
+  updateDobAge();
+  if (!dobAge || dobAge < 1 || dobAge > 110) {
+    playTick('error');
+    return;
+  }
+  playTick('calc');
+  ageInput = String(dobAge);
+  runCalculate(dobAge);
+}
+
+/* ═══════════════════════════════════
+   KEYPAD
+═══════════════════════════════════ */
+function pressKey(val) {
+  const hint = document.getElementById('ageHint');
+  hint.className = 'age-hint';
+  hint.textContent = '範圍：1–110 歲';
+
+  if (val === 'del') {
+    playTick('del');
+    ageInput = ageInput.slice(0,-1);
+  } else {
+    const next = ageInput + val;
+    if (ageInput.length >= 3) return;
+    if (next.length === 3 && parseInt(next) > 110) {
+      playTick('error'); shakeInput();
+      hint.className = 'age-hint error';
+      hint.textContent = '年齡上限為 110 歲';
+      return;
+    }
+    playTick('key');
+    ageInput = next;
+  }
+  updateDisplay();
+}
+
+function updateDisplay() {
+  const d = document.getElementById('ageDisplay');
+  const u = document.getElementById('ageUnit');
+  if (ageInput === '') { d.textContent = '—'; d.classList.remove('has-value'); u.textContent = ''; }
+  else { d.textContent = ageInput; d.classList.add('has-value'); u.textContent = '歲'; }
+}
+
+document.addEventListener('keydown', e => {
+  if (currentTab !== 'age') return;
+  if (e.key >= '0' && e.key <= '9') pressKey(e.key);
+  if (e.key === 'Backspace') pressKey('del');
+  if (e.key === 'Enter') calculate();
+});
+
+/* ═══════════════════════════════════
+   CALCULATE
+═══════════════════════════════════ */
+function calculate(silent = false) {
+  const age = parseInt(ageInput);
+  const hint = document.getElementById('ageHint');
+  if (!age || age < 1 || age > 110) {
+    hint.className = 'age-hint error';
+    hint.textContent = age > 110 ? '年齡上限為 110 歲' : '請輸入有效年齡（1–110）';
+    playTick('error'); shakeInput(); return;
+  }
+  hint.className = 'age-hint'; hint.textContent = '範圍：1–110 歲';
+  if (!silent) playTick('calc');
+  runCalculate(age, silent);
+}
+
+function runCalculate(age, silent = false) {
+  const f   = formulas[gender];
+  const mhr = f.calc(age);
+  document.getElementById('mhrVal').textContent   = mhr;
+  document.getElementById('mhrBadge').innerHTML   = `${f.name}<br>${f.expr}`;
+  const fb1 = Math.round(mhr * 0.60), fb2 = Math.round(mhr * 0.70);
+  document.getElementById('fatRange').textContent = `${fb1} – ${fb2} bpm`;
+  [[0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]].forEach(([lo,hi],i) => {
+    document.getElementById(`z${i+1}`).textContent = `${Math.round(mhr*lo)}–${Math.round(mhr*hi)}`;
+  });
+  document.getElementById('barMin').textContent = `${Math.round(mhr*0.5)} bpm`;
+  document.getElementById('barMax').textContent = `${mhr} bpm`;
+  if (activeZone) selectZone(activeZone, true);
+  if (!silent) {
+    document.getElementById('results').classList.add('visible');
+    document.getElementById('resetBtn').classList.add('visible');
+    setTimeout(() => document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'}), 100);
+  }
+}
+
+/* ═══════════════════════════════════
+   ZONE INTERACTION
+═══════════════════════════════════ */
+const zoneData = [
+  {color:'#3b82f6',name:'Zone 1 · 暖身／恢復',  pct:'50–60% MHR',feel:'輕鬆說話，鼻吸口呼，適合主動恢復日'},
+  {color:'#22d3ee',name:'Zone 2 · 有氧基礎 🔥', pct:'60–70% MHR',feel:'可說完整句子，最高效燃脂區，建議最多訓練時間'},
+  {color:'#a3e635',name:'Zone 3 · 有氧耐力',    pct:'70–80% MHR',feel:'說話開始費力，提升心肺耐力與乳酸清除能力'},
+  {color:'#fb923c',name:'Zone 4 · 乳酸閾值',    pct:'80–90% MHR',feel:'明顯喘，只能說短句，提升速度耐力'},
+  {color:'#f43f5e',name:'Zone 5 · 最大衝刺',    pct:'90–100% MHR',feel:'無法說話，全力衝刺，每次不超過 30–60 秒'},
+];
+
+function selectZone(z, refresh=false) {
+  if (!refresh && activeZone === z) { clearZoneSelection(); return; }
+  activeZone = z;
+  for (let i=1;i<=5;i++) {
+    document.getElementById(`seg${i}`).classList.remove('active','dimmed');
+    document.getElementById(`row${i}`).classList.remove('active','dimmed');
+    if (i!==z) {
+      document.getElementById(`seg${i}`).classList.add('dimmed');
+      document.getElementById(`row${i}`).classList.add('dimmed');
+    }
+  }
+  document.getElementById(`seg${z}`).classList.add('active');
+  document.getElementById(`row${z}`).classList.add('active');
+  const d = zoneData[z-1], bpm = document.getElementById(`z${z}`).textContent;
+  document.getElementById('ztDot').style.background  = d.color;
+  document.getElementById('ztName').textContent = d.name;
+  document.getElementById('ztPct').textContent  = d.pct;
+  document.getElementById('ztBpm').textContent  = bpm !== '—' ? bpm+' bpm' : '請先計算';
+  document.getElementById('ztFeel').textContent = d.feel;
+  const tt = document.getElementById('zoneTooltip');
+  tt.style.display = 'block';
+  if (!refresh) {
+    tt.style.animation='none'; requestAnimationFrame(()=>{tt.style.animation='';});
+    document.getElementById(`row${z}`).scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+}
+
+function clearZoneSelection() {
+  activeZone = null;
+  for (let i=1;i<=5;i++) {
+    document.getElementById(`seg${i}`).classList.remove('active','dimmed');
+    document.getElementById(`row${i}`).classList.remove('active','dimmed');
+  }
+  document.getElementById('zoneTooltip').style.display='none';
+}
+
+/* ═══════════════════════════════════
+   RESET
+═══════════════════════════════════ */
+function reset() {
+  ageInput = ''; updateDisplay();
+  dobAge = null; document.getElementById('dobAgeDisplay').textContent = '—';
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('resetBtn').classList.remove('visible');
+  document.getElementById('ageHint').className='age-hint';
+  document.getElementById('ageHint').textContent='範圍：1–110 歲';
+  clearZoneSelection(); nextTip();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function shakeInput() {
+  const c = document.getElementById('inputCard');
+  c.style.transform='translateX(-7px)';
+  setTimeout(()=>c.style.transform='translateX(7px)',60);
+  setTimeout(()=>c.style.transform='translateX(-4px)',120);
+  setTimeout(()=>c.style.transform='translateX(0)',180);
+}
+
+/* ═══════════════════════════════════
+   TIPS
+═══════════════════════════════════ */
+const tips = [
+  {e:'🏃',t:'Zone 2 訓練是燃脂的黃金區間——能輕鬆對話的速度，每週累積 150 分鐘，可顯著提升脂肪代謝效率。'},
+  {e:'💧',t:'運動前 2 小時飲用 500ml 水，訓練中每 15–20 分鐘補充 150–250ml，有助於維持心率穩定與表現。'},
+  {e:'😴',t:'睡眠不足會使靜止心率上升 5–10 次/分，訓練效果也大打折扣。7–9 小時高質素睡眠是最好的恢復策略。'},
+  {e:'🎵',t:'研究顯示聆聽 120–140 BPM 的音樂，可自然提升運動節奏，讓你不知不覺維持在理想的有氧心率區間。'},
+  {e:'🔄',t:'間歇訓練（HIIT）建議每週不超過 2 次，其餘時間以 Zone 2 有氧為主，讓心肺系統有充足適應時間。'},
+  {e:'📈',t:'規律的有氧訓練 8–12 週後，同樣心率下你的配速會明顯加快——這就是「有氧基礎」打好的證明。'},
+  {e:'🌡️',t:'天氣炎熱時，心率比平時高 5–10 次是正常的。根據感受而非單純的數字來調整訓練強度更為合理。'},
+  {e:'⏱️',t:'「180 法則」：以 180 減去你的年齡作為長距離訓練心率上限，能有效鍛鍊有氧能力而不過度疲勞。'},
+  {e:'🧠',t:'有氧運動每次 20 分鐘以上，大腦開始分泌 BDNF（腦源性神經營養因子），有助於記憶力與情緒管理。'},
+  {e:'🍌',t:'中等強度訓練 60 分鐘以上，可在訓練前 30 分鐘補充易消化的碳水（如香蕉），避免能量不足影響心率表現。'},
+  {e:'🧘',t:'訓練後 5–10 分鐘的緩和伸展，可讓心率安全降至靜止水平，同時減少乳酸積累引起的肌肉酸痛。'},
+  {e:'📊',t:'每月一次安靜測量靜止心率（起床後立刻測量），持續下降是有氧能力進步最直接的生理指標。'},
+  {e:'👩',t:'女性最高心率公式（Gulati）比通用 220−年齡 更準確：平均低估少 5–7 bpm，確保訓練強度更貼合生理實況。'},
+];
+for (let i=tips.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [tips[i],tips[j]]=[tips[j],tips[i]]; }
+function showTip() { const t=tips[tipIndex%tips.length]; document.getElementById('tipEmoji').textContent=t.e; document.getElementById('tipText').textContent=t.t; }
+function nextTip() { tipIndex++; showTip(); }
+showTip();
+
+// Init DOB age on load
+updateDobAge();
+
+/* ═══════════════════════════════════
+   PWA: Service Worker
+═══════════════════════════════════ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(r => console.log('[SW] Registered:', r.scope))
+      .catch(e => console.warn('[SW] Failed:', e));
+  });
+}
+
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); deferredPrompt = e;
+  const b = document.getElementById('installBanner'); b.style.display='flex';
+});
+function installPWA() { if(!deferredPrompt)return; deferredPrompt.prompt(); deferredPrompt.userChoice.then(()=>{deferredPrompt=null;dismissBanner();}); }
+function dismissBanner() { document.getElementById('installBanner').style.display='none'; }
+window.addEventListener('appinstalled', ()=>{ dismissBanner(); deferredPrompt=null; });
+</script>
+</body>
+</html>
