@@ -1,2 +1,0 @@
-# hrs
-Heart Rate Calculator
